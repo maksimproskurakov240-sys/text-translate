@@ -34,14 +34,19 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew --no-daemon :app:assembleDebug
 
-      - name: Verify APK was generated
+      - name: Prepare APK artifact
         run: |
-          find . -type f -path "*/build/outputs/apk/debug/*.apk" -print
-          test -n "$(find . -type f -path "*/build/outputs/apk/debug/*.apk" -print -quit)"
+          APK_PATH="$(find .github/workflows/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          if [ -z "$APK_PATH" ]; then
+            echo "Debug APK was not generated" >&2
+            exit 1
+          fi
+          mkdir -p artifacts
+          cp "$APK_PATH" artifacts/RemoteTTS-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: RemoteTTS-debug
-          path: "**/build/outputs/apk/debug/*.apk"
+          path: artifacts/RemoteTTS-debug.apk
           if-no-files-found: error
