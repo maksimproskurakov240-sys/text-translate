@@ -14,4 +14,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "RemoteTTS"
 include(":app")
-project(":app").projectDir = file(".github/workflows/app")
