@@ -85,11 +85,14 @@ fun GameScreen() {
     val prefs = context.getSharedPreferences("game_prefs", Context.MODE_PRIVATE)
     val gson = com.google.gson.Gson()
 
-    // Загрузка прогресса
-    var progress by remember {
-        val json = prefs.getString("progress", null)
-        if (json != null) gson.fromJson(json, GameProgress::class.java) else GameProgress()
-    }
+// Загрузка прогресса
+var progress by remember {
+    val json = prefs.getString("progress", null)
+    mutableStateOf(
+        json?.let { gson.fromJson(it, GameProgress::class.java) }
+            ?: GameProgress()
+    )
+}
 
     // Сохранение прогресса
     fun saveProgress(newProgress: GameProgress) {
