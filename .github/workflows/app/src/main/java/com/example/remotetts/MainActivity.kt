@@ -121,14 +121,12 @@ fun GameScreen() {
     val gson = remember { Gson() }
     
     val configuration = LocalConfiguration.current
-    // Принудительный портретный режим, если телефон повернут
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     
-    // Вычисляем размер квадрата с отступами от краев
+    // Вычисляем размер игрового поля. 
+    // Берем 100% ширины экрана (но не больше высоты, чтобы остаться квадратом)
     val screenWidth = configuration.screenWidthDp
     val screenHeight = configuration.screenHeightDp
-    // Берем 90% от меньшей стороны, чтобы был отступ
-    val squareSize = (minOf(screenWidth, screenHeight) * 0.95).dp
+    val squareSize = minOf(screenWidth, screenHeight).dp
 
     fun loadProgress(): GameProgress {
         val raw = prefs.getString("progress", null) ?: return GameProgress()
@@ -204,8 +202,9 @@ fun GameScreen() {
         }
     }
 
-    // Основной контейнер, который центрирует игру
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    // Основной контейнер (растягивает фон на весь экран)
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F0F19)), contentAlignment = Alignment.Center) {
+        
         // Квадратное игровое поле
         Box(
             modifier = Modifier
@@ -223,26 +222,21 @@ fun GameScreen() {
                 }
                 
                 val wallThickness = 30f
-                // Стены
                 drawRect(Color(0xFF28283C), size = Size(wallThickness, size.height))
                 drawRect(Color(0xFF28283C), topLeft = Offset(size.width - wallThickness, 0f), size = Size(wallThickness, size.height))
                 
-                // Отрисовка шипов (левая и правая стены)
                 drawSpikes(spikesLeft, isLeft = true, screenHeight = size.height)
                 drawSpikes(spikesRight, isLeft = false, screenHeight = size.height)
                 
-                // Верхние и нижние шипы
                 for (x in 30..(size.width.toInt() - 50) step 20) {
                     drawPath(Path().apply { moveTo(x.toFloat(), 0f); lineTo(x + 20f, 0f); lineTo(x + 10f, 12f); close() }, color = Color(0xFFFF2850))
                     drawPath(Path().apply { moveTo(x.toFloat(), size.height); lineTo(x + 20f, size.height); lineTo(x + 10f, size.height - 12f); close() }, color = Color(0xFFFF2850))
                 }
                 
-                // Шлейф
                 val trailColor = Color(0xFF64C8FF).copy(alpha = 0.3f)
                 drawCircle(trailColor, radius = 8f, center = Offset(birdX - direction * 15f, birdY))
                 drawCircle(trailColor.copy(alpha = 0.1f), radius = 12f, center = Offset(birdX - direction * 30f, birdY))
                 
-                // Сама птица
                 drawSkin(progress.currentSkin, birdX, birdY, direction, scale = 1.0f)
             }
 
@@ -272,9 +266,20 @@ fun GameScreen() {
 
             // Меню паузы
             if (isPaused) {
-                Box(modifier = Modifier.fillMaxSize().background(Color(0xEE1E1E28)).pointerInput(Unit) { detectTapGestures { } }) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xEE1E1E28))) {
                     Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("PAUSED", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        
+                        // Кнопка продолжения
+                        Button(
+                            onClick = { isPaused = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF32C832)),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text("RESUME", color = Color.White, fontSize = 14.sp)
+                        }
+                        
                         Spacer(Modifier.height(12.dp))
                         BasicTextField(
                             value = secretInput,
@@ -285,7 +290,7 @@ fun GameScreen() {
                             textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
                             modifier = Modifier.fillMaxWidth(0.8f).background(Color(0xFF3C3C50), RoundedCornerShape(8.dp)).padding(10.dp)
                         )
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(12.dp))
                         LazyVerticalGrid(columns = GridCells.Fixed(4), modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(skinsList.size) { index ->
                                 val (skinId, unlockScore) = skinsList[index]
@@ -306,7 +311,7 @@ fun GameScreen() {
 
             // Экран смерти
             if (isGameOver && !isPaused) {
-                Box(modifier = Modifier.fillMaxSize().background(Color(0xCC000000)).pointerInput(Unit) { detectTapGestures { } }, contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xCC000000)), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("GAME OVER", color = Color(0xFFFF3232), fontSize = 32.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(12.dp))
