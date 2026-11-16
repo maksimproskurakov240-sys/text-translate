@@ -85,48 +85,47 @@ fun GameScreen() {
     val prefs = context.getSharedPreferences("game_prefs", Context.MODE_PRIVATE)
     val gson = com.google.gson.Gson()
 
-// Загрузка прогресса
-var progress by remember {
-    val json = prefs.getString("progress", null)
-    mutableStateOf(
-        json?.let { gson.fromJson(it, GameProgress::class.java) }
-            ?: GameProgress()
-    )
-}
+    var progress by remember {
+        val json = prefs.getString("progress", null)
+        if (json != null) gson.fromJson(json, GameProgress::class.java) else GameProgress()
+    }
 
-    // Сохранение прогресса
     fun saveProgress(newProgress: GameProgress) {
         progress = newProgress
         prefs.edit().putString("progress", gson.toJson(newProgress)).apply()
     }
 
-    // Состояния игры
     var isGameOver by remember { mutableStateOf(false) }
     var isPaused by remember { mutableStateOf(false) }
     var totalScore by remember { mutableIntStateOf(0) }
     
     // Физика
-    var birdX by remember { mutableFloatStateOf(300f) }
-    var birdY by remember { mutableFloatStateOf(300f) }
+    var birdX by remember { mutableFloatStateOf(0f) }
+    var birdY by remember { mutableFloatStateOf(0f) }
     var birdVy by remember { mutableFloatStateOf(0f) }
-    var direction by remember { mutableIntStateOf(1) } // 1 = right, -1 = left
+    var direction by remember { mutableIntStateOf(1) }
     var spikesLeft by remember { mutableStateOf(listOf<Pair<Float, Float>>()) }
     var spikesRight by remember { mutableStateOf(listOf<Pair<Float, Float>>()) }
     
-    // Секретный код
     var secretInput by remember { mutableStateOf("") }
+    
+    // Переменные для адаптации под экран
+    var screenW by remember { mutableFloatStateOf(0f) }
+    var screenH by remember { mutableFloatStateOf(0f) }
+    var isInitialized by remember { mutableStateOf(false) }
 
     val skinsList = listOf(
         "default" to 0, "mango" to 50, "bunny" to 100, "cat" to 150,
         "phoenix" to 200, "watermelon" to 250, "dragon" to 300, "cosmos" to 400
     )
 
-    // Генерация шипов
+    // Генерация шипов теперь зависит от высоты экрана
     fun generateSpikes() {
+        if (screenH <= 0f) return
         fun gen(): List<Pair<Float, Float>> {
             val num = Random.nextInt(1, 4)
             return List(num) {
-                val start = Random.nextInt(80, 520).toFloat()
+                val start = Random.nextInt(100, (screenH - 100).toInt()).toFloat()
                 val height = Random.nextInt(60, 150).toFloat()
                 start to (start + height)
             }
@@ -135,48 +134,45 @@ var progress by remember {
         spikesRight = gen()
     }
 
-    // Сброс игры
     fun resetGame() {
         isGameOver = false
         isPaused = false
         totalScore = 0
-        birdX = 300f
-        birdY = 300f
+        birdX = screenW / 2
+        birdY = screenH / 2
         birdVy = 0f
         direction = 1
         generateSpikes()
     }
 
-    // Игровой цикл (60 FPS)
-    LaunchedEffect(isGameOver, isPaused) {
-        if (isGameOver || isPaused) return@LaunchedEffect
+    // Игровой цикл
+    LaunchedEffect(isGameOver, isPaused, isInitialized) {
+        if (isGameOver || isPaused || !isInitialized) return@LaunchedEffect
         generateSpikes()
 
         while (!isGameOver && !isPaused) {
-            delay(16L) // ~60 FPS
+            delay(16L) 
             
             birdVy += 0.6f
             birdY += birdVy
             birdX += 8f * direction
 
-            // Смерть об пол/потолок
-            if (birdY < 40f || birdY > 560f) {
+            // Смерть об пол/потолок (с учетом ширины шипов)
+            if (birdY < 40f || birdY > screenH - 40f) {
                 isGameOver = true
-                if (totalScore > progress.bestScore) {
-                    saveProgress(progress.copy(bestScore = totalScore))
-                }
+                if (totalScore > progress.bestScore) saveProgress(progress.copy(bestScore = totalScore))
                 break
             }
 
             // Отскок от стен
             var wallHit = false
-            if (birdX >= 540f && direction == 1) {
-                birdX = 540f; direction = -1; wallHit = true
+            if (birdX >= screenW - 60f && direction == 1) {
+                birdX = screenW - 60f; direction = -1; wallHit = true
             } else if (birdX <= 60f && direction == -1) {
                 birdX = 60f; direction = 1; wallHit = true
             }
 
-            // Проверка шипов
+            // Проверка шипов на стенах
             if (wallHit) {
                 val currentSpikes = if (direction == 1) spikesLeft else spikesRight
                 var hitSpike = false
@@ -187,9 +183,7 @@ var progress by remember {
                 }
                 if (hitSpike) {
                     isGameOver = true
-                    if (totalScore > progress.bestScore) {
-                        saveProgress(progress.copy(bestScore = totalScore))
-                    }
+                    if (totalScore > progress.bestScore) saveProgress(progress.copy(bestScore = totalScore))
                     break
                 } else {
                     totalScore++
@@ -199,24 +193,37 @@ var progress by remember {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-        detectTapGestures {
-            if (!isGameOver && !isPaused) {
-                birdVy = -8f // Прыжок
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F0F19))
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    if (!isGameOver && !isPaused) {
+                        birdVy = -8f 
+                    }
+                }
             }
-        }
-    }) {
-        // Отрисовка игрового поля
+    ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
+            // Инициализация размеров при первом рендере
+            if (!isInitialized) {
+                screenW = size.width
+                screenH = size.height
+                birdX = size.width / 2
+                birdY = size.height / 2
+                isInitialized = true
+            }
+
             // Стены
             drawRect(Color(0xFF28283C), size = Size(40f, size.height))
             drawRect(Color(0xFF28283C), topLeft = Offset(size.width - 40f, 0f), size = Size(40f, size.height))
 
             // Шипы на стенах
-            drawSpikes(spikesLeft, isLeft = true, height = size.height)
-            drawSpikes(spikesRight, isLeft = false, height = size.height)
+            drawSpikes(spikesLeft, isLeft = true, screenHeight = size.height)
+            drawSpikes(spikesRight, isLeft = false, screenHeight = size.height)
 
-            // Верхние/нижние шипы
+            // Верхние/нижние шипы (по всей ширине)
             for (x in 40..(size.width.toInt() - 60) step 20) {
                 drawPath(androidx.compose.ui.graphics.Path().apply {
                     moveTo(x.toFloat(), 0f); lineTo(x + 20f, 0f); lineTo(x + 10f, 15f); close()
@@ -241,7 +248,7 @@ var progress by remember {
             Text("BEST: ${maxOf(progress.bestScore, totalScore)}", color = Color(0xFF969696), fontSize = 16.sp)
         }
 
-        // Кнопка Паузы (всегда видна)
+        // Кнопка Паузы
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -269,7 +276,7 @@ var progress by remember {
         // Меню паузы
         if (isPaused) {
             Box(
-                modifier = Modifier.fillMaxSize().background(Color(0xFF1E1E28)).pointerInput(Unit) { detectTapGestures { } }
+                modifier = Modifier.fillMaxSize().background(Color(0xEE1E1E28)).pointerInput(Unit) { detectTapGestures { } }
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -278,7 +285,6 @@ var progress by remember {
                     Text("PAUSED", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(16.dp))
 
-                    // Ввод секретного кода
                     BasicTextField(
                         value = secretInput,
                         onValueChange = { 
@@ -297,7 +303,6 @@ var progress by remember {
 
                     Spacer(Modifier.height(24.dp))
 
-                    // Скины
                     Text("SKINS", color = Color.Gray, fontSize = 16.sp, modifier = Modifier.align(Alignment.Start))
                     Spacer(Modifier.height(8.dp))
                     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -310,7 +315,6 @@ var progress by remember {
                             val (skinId, unlockScore) = skinsList[index]
                             val isUnlocked = progress.secretCodeEntered || progress.unlockedSkins.contains(skinId) || progress.bestScore >= unlockScore
                             
-                            // Автоматическая разблокировка при достижении очков
                             if (isUnlocked && !progress.unlockedSkins.contains(skinId)) {
                                 saveProgress(progress.copy(unlockedSkins = progress.unlockedSkins + skinId))
                             }
@@ -331,7 +335,7 @@ var progress by remember {
                             ) {
                                 if (isUnlocked) {
                                     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                                        drawSkin(skinId, size.width / 2, size.height / 2, 1, scale = 0.6f)
+                                        drawSkin(skinId, size.width / 2, size.height / 2, 1, scale = 0.5f)
                                     }
                                 } else {
                                     Text("$unlockScore", color = Color(0xFFFF5050), fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -369,7 +373,7 @@ var progress by remember {
 }
 
 // Вспомогательные функции отрисовки
-fun DrawScope.drawSpikes(spikes: List<Pair<Float, Float>>, isLeft: Boolean, height: Float) {
+fun DrawScope.drawSpikes(spikes: List<Pair<Float, Float>>, isLeft: Boolean, screenHeight: Float) {
     for ((start, end) in spikes) {
         var y = start
         while (y < end) {
